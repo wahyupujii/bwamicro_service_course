@@ -1,0 +1,52 @@
+services:
+  service_course:
+    build:
+      context: .
+    container_name: bwamicro_service_course
+    working_dir: /var/www
+    ports:
+      - "9001:9000"
+    env_file:
+      - .env
+    volumes:
+      - ./:/var/www
+      # - /var/www/vendor
+    depends_on:
+      - db_course
+    networks:
+      - bwamicro
+
+  webserver:
+    image: nginx:alpine
+    container_name: bwamicro_webserver_course
+    ports:
+      - "8003:80"
+    volumes:
+      - ./:/var/www
+      - ./nginx/conf.d/:/etc/nginx/conf.d/
+    depends_on:
+      - service_course
+    networks:
+      - bwamicro
+
+  db_course:
+    image: mysql:5.7
+    container_name: bwamicro_db_course
+    ports:
+      - "3303:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: bwamicro_course
+      MYSQL_USER: bwamicro_course
+      MYSQL_PASSWORD: bwamicro_course
+    volumes:
+      - bwamicro_volume_course:/var/lib/mysql
+    networks:
+      - bwamicro
+
+volumes:
+  bwamicro_volume_course:
+
+networks:
+  bwamicro:
+    external: true

@@ -3,7 +3,7 @@ name: Build and Push Docker Image to Docker Hub
 on:
   push:
     branches:
-      - main 
+      - main
 
 jobs:
   build-and-push:
@@ -11,7 +11,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      IMAGE_NAME: mochaaii/bwamicro_service_course
+      IMAGE_SERVICE_COURSE_NAME: mochaaii/bwamicro_service_course
+      IMAGE_SERVICE_COURSE_TAG: latest
+      IMAGE_WEBSERVER_COURSE_NAME: mochaaii/bwamicro_webserver_course
+      IMAGE_WEBSERVER_COURSE_TAG: latest
 
     steps:
       - name: Checkout Repository
@@ -20,21 +23,49 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Check if webserver image with tag "latest" exists on Docker Hub
+        id: check_image
+        run: |
+          echo "Checking if image $IMAGE_WEBSERVER_COURSE_NAME:$IMAGE_WEBSERVER_COURSE_TAG exists on Docker Hub..."
+          TOKEN=$(curl -s -H "Content-Type: application/json" \
+            -X POST -d '{"username": "${{ secrets.DOCKER_HUB_USERNAME }}", "password": "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}"}' \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+
+          STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: JWT $TOKEN" \
+            https://hub.docker.com/v2/repositories/${{ env.IMAGE_WEBSERVER_COURSE_NAME }}/tags/${{ env.IMAGE_WEBSERVER_COURSE_TAG }}/)
+
+          if [ "$STATUS_CODE" -eq 200 ]; then
+            echo "Image exists on Docker Hub."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Image does not exist on Docker Hub."
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-      - name: Build and Push Docker Image
+      - name: Build and Push Docker Image Service Course
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: |
-            ${{ env.IMAGE_NAME }}:latest
-        continue-on-error: false
+          tags: ${{ env.IMAGE_SERVICE_COURSE_NAME }}:${{ env.IMAGE_SERVICE_COURSE_TAG }}
+
+      - name: Build and Push Docker Image Webserver Course
+        if: steps.check_image.outputs.exists == 'false'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.webserver
+          push: true
+          tags: ${{ env.IMAGE_WEBSERVER_COURSE_NAME }}:${{ env.IMAGE_WEBSERVER_COURSE_TAG }}
 
       - name: Logout from Docker Hub
+        if: steps.check_image.outputs.exists == 'false'
         run: docker logout
